@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloud-security-posture-scanner"
+version = "1.0.0"
+description = "Azure Cloud Security Posture Scanner - A tool that scans Azure subscriptions for security misconfigurations"
+authors = [
+    {name = "Security Team", email = "security@company.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "azure-identity>=1.15.0",
+    "azure-mgmt-storage>=21.1.0",
+    "azure-mgmt-network>=23.0.0",
+    "azure-mgmt-keyvault>=10.3.0",
+    "azure-mgmt-compute>=30.4.0",
+    "azure-mgmt-databricks>=1.0.0b1",
+    "azure-mgmt-resource>=23.0.1",
+    "azure-mgmt-subscription>=3.1.1",
+    "jinja2>=3.1.2",
+    "pydantic>=2.5.0",
+    "python-multipart>=0.0.6",
+    "aiofiles>=23.2.1",
+    "httpx>=0.25.2",
+    "python-dotenv>=1.0.0",
+    "rich>=13.7.0",
+    "typer>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.7.1",
+    "pre-commit>=3.5.0",
+]
+
+[project.scripts]
+cspm-scanner = "cspm_scanner.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

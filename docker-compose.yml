@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Backend Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: cspm-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - USE_MANAGED_IDENTITY=${USE_MANAGED_IDENTITY:-false}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - DEBUG=false
+      - REPORT_OUTPUT_DIR=/app/reports
+    volumes:
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+    networks:
+      - cspm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cspm-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - cspm-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: cspm-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - cspm-network
+    restart: unless-stopped
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: cspm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - cspm-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  cspm-network:
+    driver: bridge
