@@ -88,22 +88,22 @@ docker-compose up -d
 
 ## Demo Features to Showcase
 
-### 🔍 Security Scanning
+###  Security Scanning
 - Multi-resource scanning (Storage, NSG, Key Vault, VMs, Databricks)
 - Real-time scan progress tracking
 - Configurable severity thresholds
 
-### 📊 Risk Assessment
+###  Risk Assessment
 - Overall risk scoring (0-100 scale)
 - Severity-based findings classification
 - Interactive charts and visualizations
 
-### 📈 Reporting
+###  Reporting
 - HTML reports with interactive charts
 - JSON reports for API integration
 - Historical scan tracking
 
-### 🎯 Key Demo Points
+###  Key Demo Points
 
 1. **Real-time Scanning**: Show live scan progress
 2. **Risk Visualization**: Display risk scores and severity breakdowns
