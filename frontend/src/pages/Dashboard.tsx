@@ -17,6 +17,7 @@ const Dashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      
       const [scans] = await Promise.all([
         apiService.listScans(),
         apiService.listReports()
