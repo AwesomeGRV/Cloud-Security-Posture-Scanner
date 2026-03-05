@@ -1,9 +1,12 @@
 """Risk scoring system for security findings."""
 
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from collections import Counter
+from datetime import datetime, timedelta
+import math
+import statistics
 
-from .models import SecurityFinding, ScanResult, SeverityLevel
+from .models import SecurityFinding, ScanResult, SeverityLevel, ResourceType
 
 
 class RiskScoringEngine:
@@ -17,11 +20,41 @@ class RiskScoringEngine:
             SeverityLevel.LOW: 25,
             SeverityLevel.INFO: 10
         }
+        
+        # Contextual risk multipliers
+        self.resource_criticality = {
+            ResourceType.KEY_VAULT: 1.5,
+            ResourceType.STORAGE_ACCOUNT: 1.3,
+            ResourceType.VIRTUAL_MACHINE: 1.4,
+            ResourceType.NETWORK_SECURITY_GROUP: 1.2,
+            ResourceType.DATABRICKS_WORKSPACE: 1.3,
+            ResourceType.DISK: 1.1
+        }
+        
+        # Industry-specific risk factors
+        self.industry_factors = {
+            "healthcare": 1.3,
+            "finance": 1.4,
+            "government": 1.5,
+            "retail": 1.1,
+            "technology": 1.0
+        }
+        
+        # Data sensitivity multipliers
+        self.data_sensitivity_factors = {
+            "phi": 1.5,  # Protected Health Information
+            "pii": 1.4,  # Personally Identifiable Information
+            "financial": 1.3,
+            "intellectual_property": 1.2,
+            "public": 0.8
+        }
     
-    def calculate_overall_risk_score(self, findings: List[SecurityFinding]) -> int:
-        """Calculate overall risk score for a set of findings."""
+    def calculate_overall_risk_score(self, findings: List[SecurityFinding], context: Optional[Dict] = None) -> int:
+        """Calculate overall risk score for a set of findings with contextual factors."""
         if not findings:
             return 0
+        
+        context = context or {}
         
         # Weighted average based on severity
         total_weight = 0
@@ -43,14 +76,22 @@ class RiskScoringEngine:
         # Apply density factor (more findings = higher risk)
         density_factor = min(1.5, 1.0 + (len(findings) / 100))
         
-        final_score = min(100, base_score * density_factor)
+        # Apply contextual factors
+        context_multiplier = self._calculate_context_multiplier(findings, context)
+        
+        # Apply temporal decay for older findings
+        temporal_factor = self._calculate_temporal_factor(findings)
+        
+        final_score = min(100, base_score * density_factor * context_multiplier * temporal_factor)
         
         return int(final_score)
     
-    def calculate_resource_risk_score(self, resource_findings: List[SecurityFinding]) -> int:
-        """Calculate risk score for a specific resource."""
+    def calculate_resource_risk_score(self, resource_findings: List[SecurityFinding], resource_context: Optional[Dict] = None) -> int:
+        """Calculate risk score for a specific resource with context."""
         if not resource_findings:
             return 0
+        
+        resource_context = resource_context or {}
         
         # Use the highest severity finding as the base
         highest_severity = max(finding.severity for finding in resource_findings)
@@ -59,7 +100,20 @@ class RiskScoringEngine:
         # Factor in number of findings
         finding_count_factor = min(1.5, 1.0 + (len(resource_findings) / 10))
         
-        final_score = min(100, base_score * finding_count_factor)
+        # Apply resource criticality multiplier
+        resource_type = resource_findings[0].resource_type
+        criticality_multiplier = self.resource_criticality.get(resource_type, 1.0)
+        
+        # Apply business context
+        business_multiplier = 1.0
+        if resource_context.get("is_production", False):
+            business_multiplier *= 1.3
+        if resource_context.get("is_internet_facing", False):
+            business_multiplier *= 1.2
+        if resource_context.get("contains_sensitive_data", False):
+            business_multiplier *= 1.4
+        
+        final_score = min(100, base_score * finding_count_factor * criticality_multiplier * business_multiplier)
         
         return int(final_score)
     
@@ -216,6 +270,151 @@ class RiskScoringEngine:
             recommendations.append("Continue monitoring security posture and implement security best practices.")
         
         return recommendations
+    
+    def _calculate_context_multiplier(self, findings: List[SecurityFinding], context: Dict) -> float:
+        """Calculate contextual risk multiplier based on environment factors."""
+        multiplier = 1.0
+        
+        # Industry factor
+        industry = context.get("industry", "technology").lower()
+        multiplier *= self.industry_factors.get(industry, 1.0)
+        
+        # Data sensitivity factor
+        data_types = context.get("data_types", [])
+        if data_types:
+            max_sensitivity = max(self.data_sensitivity_factors.get(dt.lower(), 1.0) for dt in data_types)
+            multiplier *= max_sensitivity
+        
+        # Environment factor
+        if context.get("environment") == "production":
+            multiplier *= 1.2
+        elif context.get("environment") == "development":
+            multiplier *= 0.8
+        
+        # Compliance requirements
+        if context.get("compliance_frameworks"):
+            compliance_count = len(context["compliance_frameworks"])
+            multiplier *= (1.0 + (compliance_count * 0.1))
+        
+        return multiplier
+    
+    def _calculate_temporal_factor(self, findings: List[SecurityFinding]) -> float:
+        """Calculate temporal decay factor based on finding age."""
+        if not findings:
+            return 1.0
+        
+        now = datetime.utcnow()
+        ages = []
+        
+        for finding in findings:
+            age_days = (now - finding.timestamp).days
+            ages.append(age_days)
+        
+        avg_age = statistics.mean(ages)
+        
+        # Apply decay: findings older than 30 days have reduced impact
+        if avg_age > 30:
+            decay_factor = max(0.7, 1.0 - ((avg_age - 30) / 180))  # Minimum 0.7 factor
+        else:
+            decay_factor = 1.0
+        
+        return decay_factor
+    
+    def calculate_attack_surface_score(self, findings: List[SecurityFinding]) -> Dict[str, int]:
+        """Calculate attack surface metrics."""
+        attack_surface = {
+            "internet_facing": 0,
+            "internal_network": 0,
+            "data_exposure": 0,
+            "credential_exposure": 0,
+            "total": 0
+        }
+        
+        for finding in findings:
+            score = finding.risk_score
+            
+            # Categorize by attack vector
+            if "public" in finding.title.lower() or "internet" in finding.title.lower():
+                attack_surface["internet_facing"] += score
+            elif "network" in finding.title.lower() or "firewall" in finding.title.lower():
+                attack_surface["internal_network"] += score
+            elif "storage" in finding.title.lower() or "data" in finding.title.lower():
+                attack_surface["data_exposure"] += score
+            elif "key" in finding.title.lower() or "credential" in finding.title.lower():
+                attack_surface["credential_exposure"] += score
+            
+            attack_surface["total"] += score
+        
+        return attack_surface
+    
+    def calculate_risk_velocity(self, scan_results: List[ScanResult]) -> Dict[str, float]:
+        """Calculate risk velocity metrics."""
+        if len(scan_results) < 2:
+            return {"velocity": 0.0, "acceleration": 0.0, "trend": "stable"}
+        
+        # Sort by timestamp
+        sorted_scans = sorted(scan_results, key=lambda x: x.scan_timestamp)
+        
+        # Calculate velocity (change in risk score per day)
+        recent_scans = sorted_scans[-3:]  # Last 3 scans
+        velocities = []
+        
+        for i in range(1, len(recent_scans)):
+            time_diff = (recent_scans[i].scan_timestamp - recent_scans[i-1].scan_timestamp).days
+            score_diff = recent_scans[i].risk_score - recent_scans[i-1].risk_score
+            
+            if time_diff > 0:
+                velocity = score_diff / time_diff
+                velocities.append(velocity)
+        
+        avg_velocity = statistics.mean(velocities) if velocities else 0.0
+        
+        # Calculate acceleration (change in velocity)
+        acceleration = 0.0
+        if len(velocities) >= 2:
+            acceleration = velocities[-1] - velocities[-2]
+        
+        # Determine trend
+        if abs(avg_velocity) < 0.5:
+            trend = "stable"
+        elif avg_velocity > 1.0:
+            trend = "rapidly_increasing"
+        elif avg_velocity > 0.5:
+            trend = "increasing"
+        elif avg_velocity < -1.0:
+            trend = "rapidly_decreasing"
+        else:
+            trend = "decreasing"
+        
+        return {
+            "velocity": round(avg_velocity, 2),
+            "acceleration": round(acceleration, 2),
+            "trend": trend
+        }
+    
+    def generate_risk_heatmap(self, findings: List[SecurityFinding]) -> Dict[str, Dict[str, int]]:
+        """Generate risk heatmap by resource type and severity."""
+        heatmap = {}
+        
+        for resource_type in ResourceType:
+            heatmap[resource_type.value] = {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+                "total_risk": 0
+            }
+        
+        for finding in findings:
+            resource_type = finding.resource_type.value
+            severity = finding.severity.value
+            
+            if resource_type in heatmap:
+                heatmap[resource_type][severity] += 1
+                heatmap[resource_type]["total_risk"] += finding.risk_score
+        
+        return heatmap
 
 
 # Global risk scoring engine instance
